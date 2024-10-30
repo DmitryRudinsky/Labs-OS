@@ -1,0 +1,10 @@
+dtrace: system integrity protection is on, some features will not be available
+SYSCALL(args) 		 = return
+Введите имя файла:
+Сумма: 60.9
+Сумма: 13
+Сумма: 11
+Сумма: 151
+Сумма: 36.5
+Сумма: 9.5
+
