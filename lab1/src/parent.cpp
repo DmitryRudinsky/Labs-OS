@@ -1,9 +1,9 @@
-#include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
-#include <string>
 #include <cstdlib>
+#include <cstring>
+#include <cstdio>
 
 void create_pipe(int* pipe_fd) {
     if (pipe(pipe_fd) == -1) {
@@ -13,9 +13,16 @@ void create_pipe(int* pipe_fd) {
 }
 
 int main() {
-    std::string filename;
-    std::cout << "Введите имя файла: ";
-    std::getline(std::cin, filename);
+    char filename[256];
+
+    write(STDOUT_FILENO, "Введите имя файла: ", 35);
+    ssize_t bytesRead = read(STDIN_FILENO, filename, sizeof(filename) - 1);
+    if (bytesRead > 0) {
+        filename[bytesRead - 1] = '\0';
+    } else {
+        perror("Ошибка при вводе имени файла");
+        exit(EXIT_FAILURE);
+    }
 
     int pipe1_fd[2];
     create_pipe(pipe1_fd);
@@ -27,7 +34,7 @@ int main() {
     } else if (pid == 0) {
         close(pipe1_fd[0]);
 
-        int file_fd = open(filename.c_str(), O_RDONLY);
+        int file_fd = open(filename, O_RDONLY);
         if (file_fd == -1) {
             perror("File open error!\n");
             exit(EXIT_FAILURE);
@@ -50,7 +57,7 @@ int main() {
         ssize_t bytesRead;
         while ((bytesRead = read(pipe1_fd[0], buffer, sizeof(buffer) - 1)) > 0) {
             buffer[bytesRead] = '\0';
-            std::cout << buffer;
+            write(STDOUT_FILENO, buffer, bytesRead);
         }
 
         close(pipe1_fd[0]);
