@@ -145,6 +145,15 @@ int main(int argc, char* argv[]) {
         snprintf(outputBuffer, sizeof(outputBuffer), "Cluster %zu: (%.2f, %.2f)\n",
                  i, centroids[i].x, centroids[i].y);
         writeString(outputBuffer);
+
+        writeString("Points in Cluster:\n");
+        for (size_t j = 0; j < points.size(); ++j) {
+            if (assignments[j] == static_cast<int>(i)) {
+                char pointBuffer[128];
+                snprintf(pointBuffer, sizeof(pointBuffer), "  (%.2f, %.2f)\n", points[j].x, points[j].y);
+                writeString(pointBuffer);
+            }
+        }
     }
 
     sem_destroy(&semaphore);
