@@ -52,8 +52,9 @@ int main() {
                 sum += number;
             }
 
-            std::cout << "Сумма: " << sum << std::endl;
-
+            char output[256];
+            int output_len = snprintf(output, sizeof(output), "Сумма: %.2f\n", sum);
+            write(STDOUT_FILENO, output, output_len);
             line = strtok(nullptr, "\n");
         }
 
