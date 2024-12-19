@@ -14,8 +14,19 @@ const char* PROCESSING_SEM_NAME = "/my_processing_sem";
 int main() {
     char filename[256];
 
-    std::cout << "Введите имя файла: ";
-    std::cin.getline(filename, sizeof(filename));
+    write(STDOUT_FILENO, "Введите имя файла: ", 35);
+
+    ssize_t bytesRead = read(STDIN_FILENO, filename, sizeof(filename) - 1);
+    if (bytesRead == -1) {
+        perror("read error");
+        exit(EXIT_FAILURE);
+    }
+
+    if (bytesRead > 0 && filename[bytesRead - 1] == '\n') {
+        filename[bytesRead - 1] = '\0';
+    } else {
+        filename[bytesRead] = '\0';
+    }
 
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
     if (shm_fd == -1) {
