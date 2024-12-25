@@ -62,12 +62,15 @@ int main(int argc, char* argv[]) {
     free_func(allocator, ptr1);
     free_func(allocator, ptr2);
 
+    std::cout << std::endl;
+
     // Тест 2: Выделение и освобождение множества блоков
     std::vector<void*> pointers;
     for (int i = 0; i < 100; ++i) {
         void* ptr = alloc(allocator, 128);
         if (ptr) {
             pointers.push_back(ptr);
+            std::cout << i + 1 << " ptr" << ptr << std::endl;
         } else {
             std::cerr << "Failed to allocate block " << i << std::endl;
             break;
@@ -78,26 +81,73 @@ int main(int argc, char* argv[]) {
         free_func(allocator, ptr);
     }
 
+    std::cout << std::endl;
+
     // Тест 3: Проверка на утечки памяти
+    std::vector<void*> pointers_test3;
     size_t allocated_memory = 0;
     size_t freed_memory = 0;
 
     void* ptr3 = alloc(allocator, 300);
-    if (ptr3) allocated_memory += 300;
+    if (ptr3) {
+        pointers_test3.push_back(ptr3);
+        allocated_memory += 300;
+    }
 
     void* ptr4 = alloc(allocator, 400);
-    if (ptr4) allocated_memory += 400;
+    if (ptr4) {
+        pointers_test3.push_back(ptr4);
+        allocated_memory += 400;
+    }
 
-    free_func(allocator, ptr3);
-    freed_memory += 300;
-
-    free_func(allocator, ptr4);
-    freed_memory += 400;
+    for (void* ptr : pointers_test3) {
+        free_func(allocator, ptr);
+        freed_memory += (ptr == ptr3) ? 300 : 400;
+    }
 
     if (allocated_memory == freed_memory) {
         std::cout << "No memory leaks detected!" << std::endl;
     } else {
         std::cerr << "Memory leak detected!" << std::endl;
+    }
+
+    std::cout << std::endl;
+
+    // Тест 4:  на выделение памяти до исчерпания
+
+    std::vector<void*> pointers4;
+    size_t total_allocated = 0;
+    while (true) {
+        void* ptr = alloc(allocator, 128);
+        if (ptr) {
+            pointers4.push_back(ptr);
+            total_allocated += 128;
+        } else {
+            std::cout << "Memory exhausted after allocating " << total_allocated << " bytes" << std::endl;
+            break;
+        }
+    }
+
+    for (void* ptr : pointers4) {
+        free_func(allocator, ptr);
+    }
+
+    // Тест 5:  Тест на повторное выделение освобожденной памяти
+
+    void* ptr10 = alloc(allocator, 100);
+    if (ptr10) {
+        std::cout << "Allocated 100 bytes at " << ptr10 << std::endl;
+        free_func(allocator, ptr10);
+
+        void* ptr20 = alloc(allocator, 100);
+        if (ptr20) {
+            std::cout << "Reallocated 100 bytes at " << ptr20 << std::endl;
+            free_func(allocator, ptr20);
+        } else {
+            std::cerr << "Reallocation failed!" << std::endl;
+        }
+    } else {
+        std::cerr << "Initial allocation failed!" << std::endl;
     }
 
     destroy(allocator);
