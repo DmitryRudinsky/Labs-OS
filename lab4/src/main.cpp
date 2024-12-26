@@ -4,6 +4,8 @@
 #include <ctime>
 #include <vector>
 #include <chrono>
+#include <unistd.h>
+#include <cstring>
 
 typedef void* (*CreateFunc)(void*, size_t);
 typedef void (*DestroyFunc)(void*);
@@ -18,15 +20,27 @@ void sys_free(void* ptr) {
     free(ptr);
 }
 
+void write_output(const char* message) {
+    write(1, message, strlen(message));
+}
+
+void write_error(const char* message) {
+    write(2, message, strlen(message));
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <path_to_allocator_library>" << std::endl;
+        write_error("Usage: ");
+        write_error(argv[0]);
+        write_error(" <path_to_allocator_library>\n");
         return 1;
     }
 
     void* handle = dlopen(argv[1], RTLD_LAZY);
     if (!handle) {
-        std::cerr << "Error loading library: " << dlerror() << std::endl;
+        write_error("Error loading library: ");
+        write_error(dlerror());
+        write_error("\n");
         return 1;
     }
 
@@ -36,7 +50,9 @@ int main(int argc, char* argv[]) {
     FreeFunc free_func = (FreeFunc)dlsym(handle, "allocator_free");
 
     if (!create || !destroy || !alloc || !free_func) {
-        std::cerr << "Error loading functions: " << dlerror() << std::endl;
+        write_error("Error loading functions: ");
+        write_error(dlerror());
+        write_error("\n");
         dlclose(handle);
         return 1;
     }
@@ -50,19 +66,22 @@ int main(int argc, char* argv[]) {
     void* ptr2 = alloc(allocator, 200);
 
     if (ptr1 && ptr2) {
-        std::cout << "Allocation successful!" << std::endl;
-        std::cout << "ptr1: " << ptr1 << " (100 bytes)" << std::endl;
-        std::cout << "ptr2: " << ptr2 << " (200 bytes)" << std::endl;
+        write_output("Allocation successful!\n");
+        char buffer[128];
+        snprintf(buffer, sizeof(buffer), "ptr1: %p (100 bytes)\n", ptr1);
+        write_output(buffer);
+        snprintf(buffer, sizeof(buffer), "ptr2: %p (200 bytes)\n", ptr2);
+        write_output(buffer);
     } else {
-        std::cerr << "Allocation failed!" << std::endl;
-        if (!ptr1) std::cerr << "Failed to allocate 100 bytes" << std::endl;
-        if (!ptr2) std::cerr << "Failed to allocate 200 bytes" << std::endl;
+        write_error("Allocation failed!\n");
+        if (!ptr1) write_error("Failed to allocate 100 bytes\n");
+        if (!ptr2) write_error("Failed to allocate 200 bytes\n");
     }
 
     free_func(allocator, ptr1);
     free_func(allocator, ptr2);
 
-    std::cout << std::endl;
+    write_output("\n");
 
     // Тест 2: Выделение и освобождение множества блоков
     std::vector<void*> pointers;
@@ -70,9 +89,13 @@ int main(int argc, char* argv[]) {
         void* ptr = alloc(allocator, 128);
         if (ptr) {
             pointers.push_back(ptr);
-            std::cout << i + 1 << " ptr" << ptr << std::endl;
+            char buffer[128];
+            snprintf(buffer, sizeof(buffer), "%d ptr%p\n", i + 1, ptr);
+            write_output(buffer);
         } else {
-            std::cerr << "Failed to allocate block " << i << std::endl;
+            char buffer[128];
+            snprintf(buffer, sizeof(buffer), "Failed to allocate block %d\n", i);
+            write_error(buffer);
             break;
         }
     }
@@ -81,7 +104,7 @@ int main(int argc, char* argv[]) {
         free_func(allocator, ptr);
     }
 
-    std::cout << std::endl;
+    write_output("\n");
 
     // Тест 3: Проверка на утечки памяти
     std::vector<void*> pointers_test3;
@@ -106,12 +129,12 @@ int main(int argc, char* argv[]) {
     }
 
     if (allocated_memory == freed_memory) {
-        std::cout << "No memory leaks detected!" << std::endl;
+        write_output("No memory leaks detected!\n");
     } else {
-        std::cerr << "Memory leak detected!" << std::endl;
+        write_error("Memory leak detected!\n");
     }
 
-    std::cout << std::endl;
+    write_output("\n");
 
     // Тест 4:  на выделение памяти до исчерпания
 
@@ -123,7 +146,9 @@ int main(int argc, char* argv[]) {
             pointers4.push_back(ptr);
             total_allocated += 128;
         } else {
-            std::cout << "Memory exhausted after allocating " << total_allocated << " bytes" << std::endl;
+            char buffer[128];
+            snprintf(buffer, sizeof(buffer), "Memory exhausted after allocating %zu bytes\n", total_allocated);
+            write_output(buffer);
             break;
         }
     }
@@ -136,18 +161,21 @@ int main(int argc, char* argv[]) {
 
     void* ptr10 = alloc(allocator, 100);
     if (ptr10) {
-        std::cout << "Allocated 100 bytes at " << ptr10 << std::endl;
+        char buffer[128];
+        snprintf(buffer, sizeof(buffer), "Allocated 100 bytes at %p\n", ptr10);
+        write_output(buffer);
         free_func(allocator, ptr10);
 
         void* ptr20 = alloc(allocator, 100);
         if (ptr20) {
-            std::cout << "Reallocated 100 bytes at " << ptr20 << std::endl;
+            snprintf(buffer, sizeof(buffer), "Reallocated 100 bytes at %p\n", ptr20);
+            write_output(buffer);
             free_func(allocator, ptr20);
         } else {
-            std::cerr << "Reallocation failed!" << std::endl;
+            write_error("Reallocation failed!\n");
         }
     } else {
-        std::cerr << "Initial allocation failed!" << std::endl;
+        write_error("Initial allocation failed!\n");
     }
 
     destroy(allocator);
