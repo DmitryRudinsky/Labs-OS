@@ -6,6 +6,7 @@
 #include <chrono>
 #include <unistd.h>
 #include <cstring>
+#include <sys/mman.h>
 
 typedef void* (*CreateFunc)(void*, size_t);
 typedef void (*DestroyFunc)(void*);
@@ -13,11 +14,15 @@ typedef void* (*AllocFunc)(void*, size_t);
 typedef void (*FreeFunc)(void*, void*);
 
 void* sys_alloc(size_t size) {
-    return malloc(size);
+    void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (ptr == MAP_FAILED) {
+        return nullptr;
+    }
+    return ptr;
 }
 
-void sys_free(void* ptr) {
-    free(ptr);
+void sys_free(void* ptr, size_t size) {
+    munmap(ptr, size);
 }
 
 void write_output(const char* message) {
@@ -58,7 +63,12 @@ int main(int argc, char* argv[]) {
     }
 
     size_t allocator_size = 1024 * 1024; // 1 MB
-    void* allocator_memory = malloc(allocator_size);
+    void* allocator_memory = sys_alloc(allocator_size);
+    if (!allocator_memory) {
+        write_error("Failed to allocate memory for allocator\n");
+        return 1;
+    }
+
     void* allocator = create(allocator_memory, allocator_size);
 
     // Тест 1: Базовое выделение и освобождение
@@ -136,8 +146,7 @@ int main(int argc, char* argv[]) {
 
     write_output("\n");
 
-    // Тест 4:  на выделение памяти до исчерпания
-
+    // Тест 4: Выделение памяти до исчерпания
     std::vector<void*> pointers4;
     size_t total_allocated = 0;
     while (true) {
@@ -157,8 +166,7 @@ int main(int argc, char* argv[]) {
         free_func(allocator, ptr);
     }
 
-    // Тест 5:  Тест на повторное выделение освобожденной памяти
-
+    // Тест 5: Повторное выделение освобожденной памяти
     void* ptr10 = alloc(allocator, 100);
     if (ptr10) {
         char buffer[128];
@@ -179,7 +187,7 @@ int main(int argc, char* argv[]) {
     }
 
     destroy(allocator);
-    free(allocator_memory);
+    sys_free(allocator_memory, allocator_size);
     dlclose(handle);
 
     return 0;
