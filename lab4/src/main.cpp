@@ -7,22 +7,37 @@
 #include <unistd.h>
 #include <cstring>
 #include <sys/mman.h>
+#include <map>
 
 typedef void* (*CreateFunc)(void*, size_t);
 typedef void (*DestroyFunc)(void*);
 typedef void* (*AllocFunc)(void*, size_t);
 typedef void (*FreeFunc)(void*, void*);
 
-void* sys_alloc(size_t size) {
+std::map<void*, size_t> block_sizes;
+
+void* emergency_create(void* memory, size_t size) {
+    return memory;
+}
+
+void emergency_destroy(void* allocator) {
+    const char* message = "Emergency Allocator destroyed.\n";
+    write(1, message, strlen(message));
+}
+
+void* emergency_alloc(void* allocator, size_t size) {
     void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED) {
         return nullptr;
     }
+    block_sizes[ptr] = size;
     return ptr;
 }
 
-void sys_free(void* ptr, size_t size) {
+void emergency_free(void* allocator, void* ptr) {
+    size_t size = block_sizes[ptr];
     munmap(ptr, size);
+    block_sizes.erase(ptr);
 }
 
 void write_output(const char* message) {
@@ -34,36 +49,48 @@ void write_error(const char* message) {
 }
 
 int main(int argc, char* argv[]) {
+    CreateFunc create = nullptr;
+    DestroyFunc destroy = nullptr;
+    AllocFunc alloc = nullptr;
+    FreeFunc free_func = nullptr;
+
     if (argc < 2) {
-        write_error("Usage: ");
-        write_error(argv[0]);
-        write_error(" <path_to_allocator_library>\n");
-        return 1;
+        write_error("No library path provided. Using emergency allocator.\n");
+        create = emergency_create;
+        destroy = emergency_destroy;
+        alloc = emergency_alloc;
+        free_func = emergency_free;
+    } else {
+        void* handle = dlopen(argv[1], RTLD_LAZY);
+        if (!handle) {
+            write_error("Error loading library: ");
+            write_error(dlerror());
+            write_error("\nUsing emergency allocator.\n");
+            create = emergency_create;
+            destroy = emergency_destroy;
+            alloc = emergency_alloc;
+            free_func = emergency_free;
+        } else {
+            create = (CreateFunc)dlsym(handle, "allocator_create");
+            destroy = (DestroyFunc)dlsym(handle, "allocator_destroy");
+            alloc = (AllocFunc)dlsym(handle, "allocator_alloc");
+            free_func = (FreeFunc)dlsym(handle, "allocator_free");
+
+            if (!create || !destroy || !alloc || !free_func) {
+                write_error("Error loading functions: ");
+                write_error(dlerror());
+                write_error("\nUsing emergency allocator.\n");
+                dlclose(handle);
+                create = emergency_create;
+                destroy = emergency_destroy;
+                alloc = emergency_alloc;
+                free_func = emergency_free;
+            }
+        }
     }
 
-    void* handle = dlopen(argv[1], RTLD_LAZY);
-    if (!handle) {
-        write_error("Error loading library: ");
-        write_error(dlerror());
-        write_error("\n");
-        return 1;
-    }
-
-    CreateFunc create = (CreateFunc)dlsym(handle, "allocator_create");
-    DestroyFunc destroy = (DestroyFunc)dlsym(handle, "allocator_destroy");
-    AllocFunc alloc = (AllocFunc)dlsym(handle, "allocator_alloc");
-    FreeFunc free_func = (FreeFunc)dlsym(handle, "allocator_free");
-
-    if (!create || !destroy || !alloc || !free_func) {
-        write_error("Error loading functions: ");
-        write_error(dlerror());
-        write_error("\n");
-        dlclose(handle);
-        return 1;
-    }
-
-    size_t allocator_size = 1024 * 1024; // 1 MB
-    void* allocator_memory = sys_alloc(allocator_size);
+    size_t allocator_size = 1024 * 1024;
+    void* allocator_memory = mmap(nullptr, allocator_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (!allocator_memory) {
         write_error("Failed to allocate memory for allocator\n");
         return 1;
@@ -146,14 +173,21 @@ int main(int argc, char* argv[]) {
 
     write_output("\n");
 
-    // Тест 4: Выделение памяти до исчерпания
+    // Тест 4: Выделение памяти до исчерпания (с ограничением)
     std::vector<void*> pointers4;
     size_t total_allocated = 0;
+    const size_t max_blocks = 1000;
     while (true) {
         void* ptr = alloc(allocator, 128);
         if (ptr) {
             pointers4.push_back(ptr);
             total_allocated += 128;
+            if (pointers4.size() >= max_blocks) {
+                char buffer[128];
+                snprintf(buffer, sizeof(buffer), "Reached maximum blocks limit (%zu). Stopping allocation.\n", max_blocks);
+                write_output(buffer);
+                break;
+            }
         } else {
             char buffer[128];
             snprintf(buffer, sizeof(buffer), "Memory exhausted after allocating %zu bytes\n", total_allocated);
@@ -187,8 +221,7 @@ int main(int argc, char* argv[]) {
     }
 
     destroy(allocator);
-    sys_free(allocator_memory, allocator_size);
-    dlclose(handle);
+    munmap(allocator_memory, allocator_size);
 
     return 0;
 }
