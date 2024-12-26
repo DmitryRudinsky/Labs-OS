@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <cstddef>
 #include <vector>
+#include <cstring>
+#include <unistd.h>
 
 const size_t NUM_SIZES = 10;
 const size_t BLOCK_SIZES[NUM_SIZES] = {16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
@@ -29,6 +31,8 @@ public:
     }
 
     ~Allocator2() {
+        const char* message = "Allocator2 destroyed.\n";
+        write(1, message, strlen(message));
     }
 
     void* alloc(size_t size) {

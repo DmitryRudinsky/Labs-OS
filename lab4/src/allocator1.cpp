@@ -1,6 +1,8 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstddef>
+#include <cstring>
+#include <unistd.h>
 
 struct Block {
     size_t size;
@@ -24,7 +26,10 @@ public:
         free_list->next = nullptr;
     }
 
-    ~Allocator() {}
+    ~Allocator() {
+        const char* message = "Allocator destroyed.\n";
+        write(1, message, strlen(message));
+    }
 
     void *alloc(size_t size) {
         Block *current = free_list;
